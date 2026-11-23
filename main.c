@@ -17,7 +17,12 @@
 #include <sys/epoll.h>
 #include <assert.h>
 
+#define MINIAUDIO_IMPLEMENTATION
+#include "libs/miniaudio.h"
+
+
 // sound stuff------
+
 
 constexpr size_t MAX_POLYPHONY = 64;
 constexpr size_t QUEUE_SIZE    = 256;
@@ -252,9 +257,70 @@ static void start_listening_to_keys(){
 	}
 }
 
+
+
+/// miniaudio test
+
+typedef struct{
+	int16_t *audio; // uncompressed!
+	uint32_t frames;
+} Sound;
+
+#define SAMPLE_RATE 48000
+
+static bool sound_load(Sound *out, const char *path){
+	ma_decoder decoder = {};
+	ma_uint64  frames  = 0;
+	ma_decoder_config config = ma_decoder_config_init(
+		ma_format_s16, 2, SAMPLE_RATE
+	);
+
+	auto try_init = ma_decoder_init_file(
+		path, &config, &decoder
+	);
+
+	if(try_init != MA_SUCCESS){
+		return false;
+	}
+
+	auto try_frames = ma_decoder_get_length_in_pcm_frames(
+		&decoder, &frames
+	);
+	if(try_frames != MA_SUCCESS || frames == 0){
+		ma_decoder_uninit(&decoder);
+		return false;
+	}
+
+	constexpr size_t channels = 2;
+	int16_t *audio = malloc(sizeof *audio * frames * channels);
+	if(!audio){
+		ma_decoder_uninit(&decoder);
+		return false;
+	}
+
+	ma_uint64 frames_got = 0;
+	ma_decoder_read_pcm_frames(
+		&decoder, audio, frames, &frames_got
+	);
+	ma_decoder_uninit(&decoder);
+
+	out->audio  = audio;
+	out->frames = (uint32_t) frames_got;
+	return true;
+}
+
 int main(void){
 	printf("\nCurrently larping...\n");
-	start_listening_to_keys();
+	// start_listening_to_keys();
+
+	Sound sound = {};
+	sound_load(&sound, "/media/nananana/rissu/dev/larper/Ratatui.mp3");
+	printf("duration: %.2u", sound.frames / SAMPLE_RATE);
+
+	///but does it work or not???
+	// FILE *raw_audio_file = fopen("test.raw", "wb");
+	// fwrite(sound.audio, 4, sound.frames, raw_audio_file);
+	// fclose(raw_audio_file);
 
 	return 0;
 }
