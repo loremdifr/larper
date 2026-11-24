@@ -27,6 +27,10 @@
 constexpr size_t MAX_POLYPHONY = 64;
 constexpr size_t QUEUE_SIZE    = 256;
 constexpr size_t CHANNELS      = 2;
+constexpr size_t KEYMAP_COUNT  = KEY_MAX + 1;
+constexpr int16_t NO_SOUND     = -1;
+constexpr int SAMPLE_RATE      = 48000;
+constexpr int MAX_SOUNDS       = 126;
 
 typedef struct {
 	const int16_t *sound;
@@ -43,6 +47,8 @@ typedef struct {
 static PlayingSound SOUNDS_PLAYING[MAX_POLYPHONY] = {};
 static SoundQueue   SOUND_QUEUE                   = {};
 
+static int16_t KEYMAP[KEYMAP_COUNT];
+
 static inline int16_t clamp16(int32_t x){
 	constexpr int size16 = 32767;
 	if(x >  size16) return  size16;
@@ -52,6 +58,7 @@ static inline int16_t clamp16(int32_t x){
 
 
 static void start_sound(size_t sound_index);
+static bool queue_push(uint16_t id);
 
 static void audio_callback(int16_t *out, uint32_t frames){
 
@@ -194,10 +201,16 @@ static void scan_devices(void){
 	closedir(dir);
 }
 
+
+
 static void handle_event(const InputEvent *input_event){
+	//value == 1 pressed
+	//value == 0 released
+	//value == 2 autorepeat
+	if(input_event->value != 1) return;
+
 	switch(input_event->type){
 	case EV_KEY:
-		if(input_event->value != 1) break;
 		switch(input_event->code){
 			case BTN_LEFT:   printf("mouse left\n");  break;
 			case BTN_RIGHT:  printf("mouse right\n"); break;
@@ -214,6 +227,14 @@ static void handle_event(const InputEvent *input_event){
 		);
 		break;
 	};
+
+	if(input_event->code < KEYMAP_COUNT){
+		auto sound = KEYMAP[input_event->code];
+		if(sound > NO_SOUND){
+	 		//TODO: pitch variation
+			queue_push(sound);
+		}
+	}
 }
 
 static void start_listening_to_keys(){
@@ -264,8 +285,6 @@ typedef struct{
 	uint32_t frames;
 } Sound;
 
-#define SAMPLE_RATE 48000
-#define MAX_SOUNDS  126
 static Sound SOUNDS[MAX_SOUNDS];
 static size_t SOUND_COUNT = 0;
 
@@ -391,8 +410,13 @@ static bool audio_init(void){
 
 int main(void){
 
+	//init the keymap
+	for(size_t i = 0; i < KEYMAP_COUNT; i++){
+		KEYMAP[i] = NO_SOUND;
+	}
+
 	printf("\nCurrently larping...\n");
-	// start_listening_to_keys();
+
 
 	sound_load(&SOUNDS[0], "/media/nananana/rissu/dev/larper/Ratatui.mp3");
 	printf("duration: %.2u", SOUNDS[0].frames / SAMPLE_RATE);
@@ -400,13 +424,18 @@ int main(void){
 
 	assert(audio_init() && "audio_init failed");
 
-	for(int i = 0; i < 5; i++){
-		printf("\n pushing...%d", i);
-		queue_push(0);
-		sleep(1);
-	}
+	// for(int i = 0; i < 5; i++){
+	// 	printf("\n pushing...%d", i);
+	// 	queue_push(0);
+	// 	sleep(1);
+	// }
 
-	printf("\n all pushed!");
+	// printf("\n all pushed!");
+
+	//map keys
+	KEYMAP[KEY_SPACE] = 0;
+
+	start_listening_to_keys();
 
 	ma_device_uninit(&AUDIO_DEVICE);
 
