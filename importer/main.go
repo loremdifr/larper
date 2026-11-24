@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"unicode"
 
 	"github.com/SladkyCitron/resona/afmt"
 	"github.com/SladkyCitron/resona/codec"
@@ -204,6 +206,30 @@ func save_audio(
 	return encoder.Close()
 }
 
+func make_folder_name(text string) string {
+	var string_builder strings.Builder
+	for _, chr := range strings.ToLower(text) {
+		if unicode.IsLetter(chr) || unicode.IsDigit(chr) {
+			string_builder.WriteRune(chr)
+		} else {
+			string_builder.WriteRune('_')
+		}
+	}
+
+	folder_name := "converted_" + string_builder.String()
+
+	//check duplicated folder
+	for i := 2; ; i++ {
+		_, err := os.Stat(folder_name)
+		if os.IsNotExist(err) {
+			break
+		}
+		folder_name = fmt.Sprintf("%s_%d", folder_name, i)
+	}
+
+	return folder_name
+}
+
 func print_err(err error){
 	fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 	os.Exit(1)
@@ -295,7 +321,7 @@ func main(){
 	}
 	fmt.Println("Ok!");
 
-	folder_name := "converted" //TODO: maybe use pack name?
+	folder_name := make_folder_name(pack_name)
 	fmt.Printf("> Creating folder '%s'...", folder_name);
 	if err := os.MkdirAll(folder_name, 0755); err != nil {
 		print_err(err)
