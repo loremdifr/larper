@@ -26,6 +26,7 @@
 
 constexpr size_t MAX_POLYPHONY = 64;
 constexpr size_t QUEUE_SIZE    = 256;
+constexpr size_t CHANNELS      = 2;
 
 typedef struct {
 	const int16_t *sound;
@@ -42,15 +43,6 @@ typedef struct {
 static PlayingSound SOUNDS_PLAYING[MAX_POLYPHONY] = {};
 static SoundQueue   SOUND_QUEUE                   = {};
 
-static void start_sound(size_t sound_id){
-	printf("%zu", sound_id);
-	//TODO:
-	// - find sound by ID
-	// - check if any playing sound with pos >= len
-	// - otherwise, grab oldest sound
-	// - set it up
-}
-
 static inline int16_t clamp16(int32_t x){
 	constexpr int size16 = 32767;
 	if(x >  size16) return  size16;
@@ -58,14 +50,20 @@ static inline int16_t clamp16(int32_t x){
 	return x;
 }
 
+
+static void start_sound(size_t sound_index);
+
 static void audio_callback(int16_t *out, uint32_t frames){
-	auto qs       = QUEUE_SIZE - 1; //255 for 256, etc..
-	SoundQueue *q = &SOUND_QUEUE;
 
 	// check if we should be playing any sound right now
-	while(q->tail != atomic_load(&(q->head))){
-		start_sound(q->queue[q->tail++ & qs]);
+	auto tail = atomic_load(&SOUND_QUEUE.tail);
+	auto head = atomic_load(&SOUND_QUEUE.head);
+	while(tail != head){
+		auto index = tail % QUEUE_SIZE;
+		start_sound(SOUND_QUEUE.queue[index]);
+		tail++;
 	}
+	atomic_store(&SOUND_QUEUE.tail, tail);
 
 	// fill output buffer
 	for(uint32_t frame = 0; frame < frames; frame++){
@@ -81,12 +79,12 @@ static void audio_callback(int16_t *out, uint32_t frames){
 				continue;
 			}
 
-			left  += curr_sound->sound[curr_sound->pos * 2];
-			right += curr_sound->sound[curr_sound->pos * 2 + 1];
+			left  += curr_sound->sound[curr_sound->pos * CHANNELS];
+			right += curr_sound->sound[curr_sound->pos * CHANNELS + 1];
 			curr_sound->pos++;
 		}
-		out[frame * 2]     = clamp16(left);
-		out[frame * 2 + 1] = clamp16(right);
+		out[frame * CHANNELS]     = clamp16(left);
+		out[frame * CHANNELS + 1] = clamp16(right);
 	}
 }
 
@@ -267,12 +265,16 @@ typedef struct{
 } Sound;
 
 #define SAMPLE_RATE 48000
+#define MAX_SOUNDS  126
+static Sound SOUNDS[MAX_SOUNDS];
+static size_t SOUND_COUNT = 0;
+
 
 static bool sound_load(Sound *out, const char *path){
 	ma_decoder decoder = {};
 	ma_uint64  frames  = 0;
 	ma_decoder_config config = ma_decoder_config_init(
-		ma_format_s16, 2, SAMPLE_RATE
+		ma_format_s16, CHANNELS, SAMPLE_RATE
 	);
 
 	auto try_init = ma_decoder_init_file(
@@ -291,8 +293,7 @@ static bool sound_load(Sound *out, const char *path){
 		return false;
 	}
 
-	constexpr size_t channels = 2;
-	int16_t *audio = malloc(sizeof *audio * frames * channels);
+	int16_t *audio = malloc(sizeof *audio * frames * CHANNELS);
 	if(!audio){
 		ma_decoder_uninit(&decoder);
 		return false;
@@ -309,13 +310,105 @@ static bool sound_load(Sound *out, const char *path){
 	return true;
 }
 
+static void start_sound(size_t sound_index){
+	if(sound_index >= SOUND_COUNT) return;
+	auto sound = &SOUNDS[sound_index];
+
+	//slot where we play the sound
+	PlayingSound *slot = &SOUNDS_PLAYING[0];
+
+	//find the first available slot
+	//if no slots are available, we use the oldest
+	for(size_t i = 0; i < MAX_POLYPHONY; i++){
+		PlayingSound *playing_sound = &SOUNDS_PLAYING[i];
+
+		//available
+		if(playing_sound->pos >= playing_sound->size){
+			slot = playing_sound;
+			break;
+		}
+
+		//oldest (or the one that's closer to done)
+		if(playing_sound->pos > slot->pos){
+			slot = playing_sound;
+		}
+	}
+
+	//set the slot to the sound
+	slot->sound = sound->audio;
+	slot->size  = sound->frames;
+	slot->pos   = 0;
+}
+
+static bool queue_push(uint16_t id){
+	auto head = atomic_load(&SOUND_QUEUE.head);
+	auto tail = atomic_load(&SOUND_QUEUE.tail);
+
+	//queue full
+	if(head - tail >= QUEUE_SIZE){
+		return false;
+	}
+
+	auto index = head % QUEUE_SIZE;
+	SOUND_QUEUE.queue[index] = id;
+
+	//set the nmew head
+	atomic_store(&SOUND_QUEUE.head, head + 1);
+	return true;
+}
+
+static void miniaudio_callback(
+	ma_device *device,
+	void *out,
+	const void *in,
+	ma_uint32 frames
+){
+	//idk??
+	(void) device;
+	(void) in;
+	audio_callback(out, frames);
+}
+
+static ma_device AUDIO_DEVICE;
+
+static bool audio_init(void){
+	auto config = ma_device_config_init(ma_device_type_playback);
+	config.playback.format    = ma_format_s16;
+	config.playback.channels  = CHANNELS;
+	config.sampleRate         = SAMPLE_RATE;
+	config.dataCallback       = miniaudio_callback;
+	config.performanceProfile = ma_performance_profile_low_latency;
+	config.periodSizeInFrames = 256; //TODO: is this correct..?
+
+	auto try_init = ma_device_init(NULL, &config, &AUDIO_DEVICE);
+	if(try_init != MA_SUCCESS){
+		return false;
+	}
+
+	auto try_start = ma_device_start(&AUDIO_DEVICE);
+	return try_start == MA_SUCCESS;
+}
+
 int main(void){
+
 	printf("\nCurrently larping...\n");
 	// start_listening_to_keys();
 
-	Sound sound = {};
-	sound_load(&sound, "/media/nananana/rissu/dev/larper/Ratatui.mp3");
-	printf("duration: %.2u", sound.frames / SAMPLE_RATE);
+	sound_load(&SOUNDS[0], "/media/nananana/rissu/dev/larper/Ratatui.mp3");
+	printf("duration: %.2u", SOUNDS[0].frames / SAMPLE_RATE);
+	SOUND_COUNT = 1;
+
+	assert(audio_init() && "audio_init failed");
+
+	for(int i = 0; i < 5; i++){
+		printf("\n pushing...%d", i);
+		queue_push(0);
+		sleep(1);
+	}
+
+	printf("\n all pushed!");
+
+	ma_device_uninit(&AUDIO_DEVICE);
 
 	///but does it work or not???
 	// FILE *raw_audio_file = fopen("test.raw", "wb");
