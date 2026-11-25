@@ -27,7 +27,6 @@ static constexpr char COMMANDS[] =
 "  packs     information about Sound Packs\n"
 "  keys      lists the expected filenames for the WAV files\n"
 "  help      shows this message\n"
-"  import    utility to import sound packs from MechVibes\n"
 ;
 
 static constexpr char PACKS[] =
@@ -39,8 +38,8 @@ static constexpr char PACKS[] =
 "\nWHERE TO GET SOUND PACKS?\n"
 "1. larper comes with an importer utility to import Sounds Packs from MechVibes.\n"
 "2. you can download packs from MechVibes at https://mechvibes.com/sound-packs\n"
-"3. once you get the zip file from there, run:\n"
-"   %s import <zipfile>\n\n"
+"3. once you get the zip file from there, run it:\n"
+"   importer <zipfile>\n\n"
 ;
 
 void print_expected_filenames(){
@@ -96,7 +95,7 @@ int main(int argc, char *argv[argc]){
 	|| strcmp(first_arg, "--packs") == 0
 	|| strcmp(first_arg, "sounds") == 0
 	|| strcmp(first_arg, "soundpacks") == 0){
-		printf(PACKS, program_name, program_name);
+		printf(PACKS, program_name);
 		return EXIT_SUCCESS;
 	}
 
@@ -107,24 +106,16 @@ int main(int argc, char *argv[argc]){
 		return EXIT_SUCCESS;
 	}
 
-	if(strcmp(first_arg, "import") == 0){
-		//TODO:
-		return EXIT_SUCCESS;
-	}
-
-	//"/media/nananana/rissu/dev/larper/importer/converted_keyboard"
-	printf("\n> Loading pack: %s\n", first_arg);
+	printf("\n> Loading pack: '%s'...", first_arg);
 	pack_load(first_arg);
-	printf("\n> loaded pack: %zu sounds\n", SOUND_COUNT);
+	printf("Ok! (%zu sounds loaded)\n", SOUND_COUNT);
 
+	printf("> Initializing audio...");
+	ASSERT(audio_init(), "audio_init failed");
+	printf("Ok!\n");
 
-	assert(audio_init() && "audio_init failed");
-
-	//TODO: this string should go into the listener
-	// printf("\nCurrently larping...\n");
 	start_listening_to_keys();
 
 	audio_free();
-
 	return EXIT_SUCCESS;
 }

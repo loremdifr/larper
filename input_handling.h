@@ -62,7 +62,7 @@ static void _add_device(const char *path){
 	if(DEVICES_COUNT >= MAX_DEVICES) return;
 
 	int fd = open(path, O_RDONLY | O_NONBLOCK);
-	assert(fd >= 0 && "fuck"); //TODO: better msg
+	ASSERT(fd >= 0, "failed to open device '%s'", path);
 
 	// make sure it's a kb or mouse
 	if(!_has_event_type(fd, EV_KEY)
@@ -93,21 +93,21 @@ static void _add_device(const char *path){
 		return;
 	}
 
-	printf(
-		"added device: %s (%s)\n",
-		curr_device->name,
-		curr_device->path
-	);
+	// printf(
+	// 	"added device: %s (%s)\n",
+	// 	curr_device->name,
+	// 	curr_device->path
+	// );
 
 	DEVICES_COUNT++;
 }
 
 static void _scan_devices(void){
 	DIR *dir = opendir("/dev/input");
-	assert(dir && "yowch"); //TODO: better msg
+	ASSERT(dir, "failed to open /dev/input");
 
 	DirEntry *entry = readdir(dir);
-	printf("\nscan devices start..");
+	// printf("\nscan devices start..");
 	while(entry != NULL){
 		if(strncmp(entry->d_name, "event", 5) == 0){
 			char path[64];
@@ -125,58 +125,60 @@ static void _scan_devices(void){
 
 
 static void _handle_event(const InputEvent *input_event){
+	if(input_event->code >= KEYMAP_COUNT) return;
+
+	//NOTE: we only really care about pressing!
 	//value == 1 pressed
 	//value == 0 released
 	//value == 2 autorepeat
 	if(input_event->value != 1) return;
 
+	int keycode = -1;
 	switch(input_event->type){
-	case EV_KEY:
-		switch(input_event->code){
-			case BTN_LEFT:   printf("mouse left\n");  break;
-			case BTN_RIGHT:  printf("mouse right\n"); break;
-			case BTN_MIDDLE: printf("mouse mid\n");   break;
-			default: printf("key:%d\n", input_event->code);
-		}
-		break;
+	case EV_KEY: keycode = input_event->code; break;
 	case EV_REL:
+		//only mouse wheel for this
+		//value is +1 -1 for direction up or down
 		if(input_event->code != REL_WHEEL) break;
-		printf(
-			input_event->value > 0
-				? "mwheel up\n"
-				: "mwheel down\n"
-		);
+		if(input_event->value == 0)        break;
+		keycode = (input_event->value > 0)
+			? MWHEEL_UP
+			: MWHEEL_DOWN;
 		break;
+	default: return; //IMPORTANT! otherwise we get sounds for mouse moves
 	};
 
-	if(input_event->code < KEYMAP_COUNT){
-		auto sound = KEYMAP[input_event->code];
-		if(sound > NO_SOUND){
-	 		//pitch randomization!
-	 		auto pitch_variation = random_step(0.05);
-	 		printf("\n PITCH: %.3f\n", pitch_variation);
-			queue_push(sound, pitch_variation);
-		}
+	if(keycode < 0) return; //TODO: not sure if needed..?
+
+	auto sound = KEYMAP[keycode];
+	if(sound > NO_SOUND){
+ 		//pitch randomization!
+ 		auto pitch_variation = random_step(0.05);
+ 		// printf("\n PITCH: %.3f\n", pitch_variation);
+		queue_push(sound, pitch_variation);
 	}
 }
 
 void start_listening_to_keys(void){
 	EPOLL_FD = epoll_create1(0);
-	assert(EPOLL_FD >= 0 && "help"); //TODO: better msg
+	ASSERT(EPOLL_FD >= 0, "failed when creating epoll fd");
 
+	printf("> Scanning input devices...\n");
 	_scan_devices();
-
 	if(DEVICES_COUNT == 0){
-		fprintf(stderr, "no devices"); //TODO: better msg
+		fprintf(stderr, "ERROR: no input devices found (is it running from the input group?)");
 		return;
 	}
+	printf("Ok! (%zu devices found)\n", DEVICES_COUNT);
 
-	printf("total devices: %zu\n", DEVICES_COUNT);
+	// printf("total devices: %zu\n", DEVICES_COUNT);
+
+	printf("\nWaiting for key events...\n");
 
 	EpollEvent events[MAX_DEVICES];
 	while(true){
 		int fd_count = epoll_wait(EPOLL_FD, events, DEVICES_COUNT, -1);
-		assert(fd_count >= 0 && "it broke"); //TODO: better msg
+		ASSERT(fd_count >= 0, "fd_count invalid");
 
 		for(size_t i = fd_count; i-- > 0;){
 			size_t idx = events[i].data.u32;
@@ -185,7 +187,7 @@ void start_listening_to_keys(void){
 			InputEvent input_ev;
 			ssize_t	bytes = read(DEVICES[idx].fd, &input_ev, sizeof(input_ev));
 
-			assert(bytes >= 0 && "where is my device???"); //TODO: better msg
+			ASSERT(bytes >= 0, "no device found"); //TODO: better msg
 
 			if(bytes == (ssize_t) sizeof(input_ev)){
 				_handle_event(&input_ev);

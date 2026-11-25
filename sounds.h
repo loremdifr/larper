@@ -16,7 +16,6 @@ constexpr size_t CHANNELS      = 2;
 constexpr int16_t NO_SOUND     = -1;
 constexpr int SAMPLE_RATE      = 48000;
 constexpr int MAX_SOUNDS       = 126;
-constexpr size_t KEYMAP_COUNT  = KEY_MAX + 1;
 
 typedef struct {
 	const int16_t *sound;
@@ -104,7 +103,7 @@ void audio_free(void){
 
 bool pack_load(const char *folder_path){
 	DIR *dir = opendir(folder_path);
-	assert(dir && "Failed to open folder_path");
+	ASSERT(dir, "Failed to open folder_path: %s", folder_path);
 
 	//init the keymap
 	for(size_t i = 0; i < KEYMAP_COUNT; i++){

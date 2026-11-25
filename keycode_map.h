@@ -9,7 +9,25 @@ typedef struct {
 	uint16_t    code;
 } KeyName;
 
+enum {
+	MWHEEL_UP = KEY_MAX + 1,
+	MWHEEL_DOWN,
+	KEYMAP_COUNT,
+};
+
 static const KeyName KEY_NAMES[] = {
+
+	{"MouseWheelUp",    MWHEEL_UP},
+	{"MouseWheelDown",  MWHEEL_DOWN},
+
+	{"MouseLeft",    BTN_LEFT},
+	{"MouseRight",   BTN_RIGHT},
+	{"MouseMiddle",  BTN_MIDDLE},
+	{"MouseSide",    BTN_SIDE},
+	{"MouseExtra",   BTN_EXTRA},
+	{"MouseForward", BTN_FORWARD},
+	{"MouseBack",    BTN_BACK},
+
 	{"KeyA", KEY_A},
 	{"KeyB", KEY_B},
 	{"KeyC", KEY_C},
