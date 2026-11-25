@@ -16,6 +16,7 @@
 #include <sys/ioctl.h>
 #include <sys/epoll.h>
 #include <assert.h>
+#include "keymap.h"
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "libs/miniaudio.h"
@@ -56,6 +57,8 @@ static inline int16_t clamp16(int32_t x){
 	return x;
 }
 
+
+//TODO: forward def everytihng
 
 static void start_sound(size_t sound_index);
 static bool queue_push(uint16_t id);
@@ -408,19 +411,60 @@ static bool audio_init(void){
 	return try_start == MA_SUCCESS;
 }
 
-int main(void){
+typedef struct dirent DirEntry;
+
+static bool pack_load(const char *folder_path){
+	DIR *dir = opendir(folder_path);
+	assert(dir && "Failed to open folder_path");
 
 	//init the keymap
 	for(size_t i = 0; i < KEYMAP_COUNT; i++){
 		KEYMAP[i] = NO_SOUND;
 	}
 
+	DirEntry *dir_entry;
+	while((dir_entry = readdir(dir))){
+		char *rest;
+
+		auto filename  = dir_entry->d_name;
+		auto length    = strlen(filename);
+		auto extension = filename + length - 4;
+		if(length <= 4 || strcmp(extension, ".wav") != 0){
+			continue;
+		}
+
+		auto code = keycode_from_name(filename, length - 4);
+		if(code < 0){
+			fprintf(stderr, "invalid key name: %s\n", filename);
+			continue;
+		}
+
+		if(SOUND_COUNT >= MAX_SOUNDS) break;
+
+		char sound_path[1024];
+		snprintf(sound_path, sizeof sound_path, "%s/%s", folder_path, filename);
+		if(!sound_load(&SOUNDS[SOUND_COUNT], sound_path)){
+			fprintf(stderr, "loading failed for: %s\n", sound_path);
+			continue;
+		}
+
+		KEYMAP[code] = SOUND_COUNT++;
+	}
+	closedir(dir);
+	return SOUND_COUNT > 0;
+}
+
+int main(void){
+
+	//TODO: load from the thingy instead:
+	pack_load("/media/nananana/rissu/dev/larper/importer/converted_keyboard");
+
 	printf("\nCurrently larping...\n");
 
 
-	sound_load(&SOUNDS[0], "/media/nananana/rissu/dev/larper/Ratatui.mp3");
-	printf("duration: %.2u", SOUNDS[0].frames / SAMPLE_RATE);
-	SOUND_COUNT = 1;
+	// sound_load(&SOUNDS[0], "/media/nananana/rissu/dev/larper/Ratatui.mp3");
+	// printf("duration: %.2u", SOUNDS[0].frames / SAMPLE_RATE);
+	// SOUND_COUNT = 1;
 
 	assert(audio_init() && "audio_init failed");
 
