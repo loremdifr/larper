@@ -4,6 +4,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <sys/signalfd.h>
+#include <unistd.h>
 
 #include "utils.h"
 #include "keycode_map.h"
@@ -59,6 +62,18 @@ void print_expected_filenames(){
 
 }
 
+static int QUIT_SIGNAL = -1;
+
+void setup_signals(){
+	sigset_t mask;
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+	sigaddset(&mask, SIGTERM);
+	sigprocmask(SIG_BLOCK, &mask, NULL);
+
+	QUIT_SIGNAL = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+}
+
 int main(int argc, char *argv[argc]){
 
 	const char *program_name = (argc > 0 && argv[0])
@@ -106,6 +121,8 @@ int main(int argc, char *argv[argc]){
 		return EXIT_SUCCESS;
 	}
 
+	setup_signals();
+
 	printf("\n> Loading pack: '%s'...", first_arg);
 	pack_load(first_arg);
 	printf("Ok! (%zu sounds loaded)\n", SOUND_COUNT);
@@ -114,8 +131,9 @@ int main(int argc, char *argv[argc]){
 	ASSERT(audio_init(), "audio_init failed");
 	printf("Ok!\n");
 
-	start_listening_to_keys();
+	start_listening_to_keys(QUIT_SIGNAL);
 
 	audio_free();
+	close(QUIT_SIGNAL);
 	return EXIT_SUCCESS;
 }
