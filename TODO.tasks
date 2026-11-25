@@ -1,0 +1,7 @@
+	[x]	refactor into separate files @done (26-11-25 03:48)
+	[ ]	use argv for the target folder
+	[ ]	instructions when called wrong
+	[ ]	be able to list all the expected sound files and usage
+	[ ]	map unused keys?
+	[ ]	handle sigint properly
+	[ ]	handle connecting and disconnecting input devices

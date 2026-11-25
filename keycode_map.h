@@ -1,7 +1,8 @@
-#ifndef _KEYMAP_H
-#define _KEYMAP_H
+#ifndef _KEYCODE_MAP_H
+#define _KEYCODE_MAP_H
 
 #include <linux/input-event-codes.h>
+#include <string.h>
 
 typedef struct {
 	const char *name;
@@ -140,4 +141,4 @@ static int keycode_from_name(const char *name, size_t len){
 	return -1;
 }
 
-#endif //_KEYMAP_H
+#endif //_KEYCODE_MAP_H
