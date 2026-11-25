@@ -21,6 +21,7 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "libs/miniaudio.h"
 
+//TODO: split into files
 
 // sound stuff------
 
@@ -35,18 +36,24 @@ constexpr int MAX_SOUNDS       = 126;
 
 typedef struct {
 	const int16_t *sound;
-	uint32_t       pos;
+	float          pos;
+	float          step;
 	uint32_t       size;
 } PlayingSound;
 
 typedef struct {
-	uint16_t         queue[QUEUE_SIZE];
+	uint16_t id;
+	float    step;
+} SoundEvent;
+
+typedef struct {
+	SoundEvent       queue[QUEUE_SIZE];
 	_Atomic uint32_t head;
 	_Atomic uint32_t tail;
-} SoundQueue;
+} SoundEventQueue;
 
-static PlayingSound SOUNDS_PLAYING[MAX_POLYPHONY] = {};
-static SoundQueue   SOUND_QUEUE                   = {};
+static PlayingSound    SOUNDS_PLAYING[MAX_POLYPHONY] = {};
+static SoundEventQueue SOUND_QUEUE                   = {};
 
 static int16_t KEYMAP[KEYMAP_COUNT];
 
@@ -57,44 +64,80 @@ static inline int16_t clamp16(int32_t x){
 	return x;
 }
 
+static inline float lerpf(float from, float to, float weight){
+	return from + (to - from) * weight;
+}
 
 //TODO: forward def everytihng
 
-static void start_sound(size_t sound_index);
-static bool queue_push(uint16_t id);
+static void start_sound(SoundEvent *sound_event);
+static bool queue_push(uint16_t id, float step);
+
+static float random_step(float variation){
+	if(variation <= 0.0f) return 1.0f;
+	auto random = (float)rand() / (float)RAND_MAX;
+	auto ranged_rand = (random * 2.0f - 1.0f);
+	return 1.0f + ranged_rand * variation;
+}
+
+static inline bool continue_playing_sound(
+	PlayingSound *playing_sound,
+	float *left,
+	float *right
+){
+	auto curr_pos = (uint32_t)playing_sound->pos;
+
+	//sound done playing
+	if(curr_pos >= playing_sound->size){
+		return false;
+	}
+
+	auto next_pos = (curr_pos + 1 < playing_sound->size)
+		? curr_pos + 1
+		: curr_pos;
+	float weight = playing_sound->pos - (float)curr_pos;
+
+	const int16_t *from = &playing_sound->sound[curr_pos * CHANNELS];
+	const int16_t *to   = &playing_sound->sound[next_pos * CHANNELS];
+
+	*left  += lerpf(from[0], to[0], weight);
+	*right += lerpf(from[1], to[1], weight);
+
+	playing_sound->pos += playing_sound->step;
+
+	return true;
+}
+
 
 static void audio_callback(int16_t *out, uint32_t frames){
 
 	// check if we should be playing any sound right now
 	auto tail = atomic_load(&SOUND_QUEUE.tail);
 	auto head = atomic_load(&SOUND_QUEUE.head);
+
 	while(tail != head){
 		auto index = tail % QUEUE_SIZE;
-		start_sound(SOUND_QUEUE.queue[index]);
+		start_sound(&SOUND_QUEUE.queue[index]);
 		tail++;
 	}
+
 	atomic_store(&SOUND_QUEUE.tail, tail);
 
 	// fill output buffer
 	for(uint32_t frame = 0; frame < frames; frame++){
 
 		//stereo
-		int32_t left  = 0;
-		int32_t right = 0;
+		float left  = 0;
+		float right = 0;
 
 		for(size_t sound = 0; sound < MAX_POLYPHONY; sound++){
-			PlayingSound *curr_sound = &SOUNDS_PLAYING[sound];
-
-			if(curr_sound->pos >= curr_sound->size){
-				continue;
-			}
-
-			left  += curr_sound->sound[curr_sound->pos * CHANNELS];
-			right += curr_sound->sound[curr_sound->pos * CHANNELS + 1];
-			curr_sound->pos++;
+			auto curr_sound = &SOUNDS_PLAYING[sound];
+			continue_playing_sound(curr_sound, &left, &right);
 		}
+
 		out[frame * CHANNELS]     = clamp16(left);
 		out[frame * CHANNELS + 1] = clamp16(right);
+	 	//NOTE: +1 for right because it's interleaved stereo audio
 	}
 }
 
@@ -234,8 +277,10 @@ static void handle_event(const InputEvent *input_event){
 	if(input_event->code < KEYMAP_COUNT){
 		auto sound = KEYMAP[input_event->code];
 		if(sound > NO_SOUND){
-	 		//TODO: pitch variation
-			queue_push(sound);
+	 		//pitch randomization!
+	 		auto pitch_variation = random_step(0.05);
+	 		printf("\n PITCH: %.3f\n", pitch_variation);
+			queue_push(sound, pitch_variation);
 		}
 	}
 }
@@ -332,8 +377,13 @@ static bool sound_load(Sound *out, const char *path){
 	return true;
 }
 
-static void start_sound(size_t sound_index){
+static void start_sound(SoundEvent *sound_event){
+	auto sound_index = sound_event->id;
+	auto sound_step  = sound_event->step;
+
 	if(sound_index >= SOUND_COUNT) return;
+	// printf("start sound called with: %zu\n", sound_index);
+
 	auto sound = &SOUNDS[sound_index];
 
 	//slot where we play the sound
@@ -360,9 +410,10 @@ static void start_sound(size_t sound_index){
 	slot->sound = sound->audio;
 	slot->size  = sound->frames;
 	slot->pos   = 0;
+	slot->step  = sound_step;
 }
 
-static bool queue_push(uint16_t id){
+static bool queue_push(uint16_t id, float step){
 	auto head = atomic_load(&SOUND_QUEUE.head);
 	auto tail = atomic_load(&SOUND_QUEUE.tail);
 
@@ -372,9 +423,9 @@ static bool queue_push(uint16_t id){
 	}
 
 	auto index = head % QUEUE_SIZE;
-	SOUND_QUEUE.queue[index] = id;
+	SOUND_QUEUE.queue[index] = (SoundEvent){.id=id, .step=step};
 
-	//set the nmew head
+	//set the new head
 	atomic_store(&SOUND_QUEUE.head, head + 1);
 	return true;
 }
@@ -424,7 +475,6 @@ static bool pack_load(const char *folder_path){
 
 	DirEntry *dir_entry;
 	while((dir_entry = readdir(dir))){
-		char *rest;
 
 		auto filename  = dir_entry->d_name;
 		auto length    = strlen(filename);
@@ -458,6 +508,8 @@ int main(void){
 
 	//TODO: load from the thingy instead:
 	pack_load("/media/nananana/rissu/dev/larper/importer/converted_keyboard");
+
+	printf("\n loaded pack: %zu sounds\n", SOUND_COUNT);
 
 	printf("\nCurrently larping...\n");
 
