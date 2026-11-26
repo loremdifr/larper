@@ -18,9 +18,9 @@
 constexpr size_t MAX_DEVICES = 64;
 
 typedef struct {
-	size_t fd;
-	char   path[64];
-	char   name[256];
+	int  fd;
+	char path[64];
+	char name[256];
 } InputDevice;
 
 typedef struct epoll_event EpollEvent;
@@ -34,6 +34,8 @@ static int         INOTIFY_FD           = -1;
 void start_listening_to_keys(int quit_signal);
 
 static bool _has_event_type(int fd, unsigned long ev_type);
+static bool _has_keycode(int fd, int keycode);
+static bool _is_kb_or_mouse(int fd);
 static bool _add_device(const char *path);
 static void _remove_device(InputDevice *device);
 static int  _scan_devices(void);
@@ -51,11 +53,32 @@ static bool _has_event_type(int fd, unsigned long ev_type){
 	auto read_types = EVIOCGBIT(0, sizeof(types));
 	if(ioctl(fd, read_types, types) < 0) return false;
 
-	unsigned long type_word = types[ev_type / 8];
+	unsigned long type_byte = types[ev_type / 8];
 	unsigned int  type_bit  = ev_type % 8;
-	bool          has_type  = (type_word >> type_bit) & 1;
+	bool          has_type  = (type_byte >> type_bit) & 1;
 
 	return has_type;
+}
+
+static bool _has_keycode(int fd, int keycode){
+	uint8_t keycodes[KEY_MAX / 8 + 1] = {};
+
+	auto read_codes = EVIOCGBIT(EV_KEY, sizeof keycodes);
+	if(ioctl(fd, read_codes, keycodes) < 0) return false;
+
+	unsigned long code_byte = keycodes[keycode / 8];
+	unsigned int  code_bit  = keycode % 8;
+	bool          has_code  = (code_byte >> code_bit) & 1;
+
+	return  has_code;
+}
+
+static bool _is_kb_or_mouse(int fd){
+	bool is_kb = _has_keycode(fd, KEY_A)
+		      || _has_keycode(fd, KEY_KP0);
+	bool is_mouse = _has_keycode(fd, BTN_LEFT)
+	             && _has_event_type(fd, EV_REL);
+	return is_kb || is_mouse;
 }
 
 
@@ -68,7 +91,8 @@ static bool _add_device(const char *path){
 		auto is_freed    = (DEVICES[i].fd < 0);
 
 		//device already added
-		if(strcmp(device_path, path) != 0 && !is_freed){
+		if(strcmp(device_path, path) == 0 && !is_freed){
+			// printf("[ALREADY ADDED]");
 			return false;
 		}
 
@@ -78,15 +102,33 @@ static bool _add_device(const char *path){
 	}
 
 	//no more empty slots
-	if(first_empty_slot == MAX_DEVICES) return false;
+	if(first_empty_slot == MAX_DEVICES){
+		// printf("[NO MORE EMPTY SLOTS]");
+		return false;
+	}
 
 	int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-	ASSERT(fd >= 0, "failed to open device '%s'", path);
+	if(fd < 0){
+		// printf("[FAILED TO OPEN DEVICE]");
+		return false;
+	}
 
 	// make sure it's a kb or mouse
-	if(!_has_event_type(fd, EV_KEY)
-	&& !_has_event_type(fd, EV_REL)){
+	if(!_is_kb_or_mouse(fd)){
 		close(fd);
+		// printf("[NO KB OR MOUSE]");
+		return false;
+	}
+
+	EpollEvent epoll_ev = {
+		.events  = EPOLLIN,
+		.data.fd = fd
+	};
+
+	//actually register fd so that we can watch for events
+	if(epoll_ctl(EPOLL_FD, EPOLL_CTL_ADD, fd, &epoll_ev) < 0){
+		close(fd);
+		// printf("[EPOLL_CTL FAILED]");
 		return false;
 	}
 
@@ -100,30 +142,17 @@ static bool _add_device(const char *path){
 		curr_device->name
 	);
 
-	EpollEvent epoll_ev = {
-		.events  = EPOLLIN,
-		.data.fd = first_empty_slot
-	};
-
-	//actually register fd so that we can watch for events
-	if(epoll_ctl(EPOLL_FD, EPOLL_CTL_ADD, fd, &epoll_ev) < 0){
-		close(fd);
-		return false;
-	}
-
-	printf(
-		"added device: %s (%s)\n",
-		curr_device->name,
-		curr_device->path
-	);
+	printf("[+] %s\n", curr_device->name);
 	return true;
 }
 
 static void _remove_device(InputDevice *device){
+	fprintf(stderr, "[-] %s\n", device->name);
 	epoll_ctl(EPOLL_FD, EPOLL_CTL_DEL, device->fd, NULL);
 	close(device->fd);
 	device->fd = -1;
-	fprintf(stderr, "[!] DEVICE REMOVED: %s\n", device->path);
+	device->path[0] = '\0';
+	device->name[0] = '\0';
 }
 
 static int _scan_devices(void){
@@ -141,12 +170,12 @@ static int _scan_devices(void){
 				"/dev/input/%s", entry->d_name
 			);
 
-			printf("\n> trying to register device: %s ...", path);
+			// printf("\n> trying to register device: %s ...", path);
 			if(_add_device(path)){
-				printf("Ok!");
+				// printf(" Ok!");
 				devices_count++;
 			}else{
-				printf("FAILED");
+				// printf(" FAILED");
 			}
 		}
 		entry = readdir(dir);
@@ -206,9 +235,10 @@ static void _handle_inotify(void){
 		&& strncmp(inotify_event->name, "event", 5) == 0){
 			char path[128];
 			snprintf(
-				path, sizeof path, "dev/input/%s",
+				path, sizeof path, "/dev/input/%s",
 				inotify_event->name
 			);
+			_add_device(path);
 		}
 
 		//advance cursor
@@ -268,15 +298,36 @@ void start_listening_to_keys(int quit_signal){
 	//signal for when devices change
 	inotify_add_watch(INOTIFY_FD, "/dev/input", IN_CREATE | IN_ATTRIB);
 
+	//watch for device signals
+	EpollEvent w = {
+		.events = EPOLLIN,
+		.data.fd = INOTIFY_FD
+	};
+	ASSERT(
+		epoll_ctl(EPOLL_FD, EPOLL_CTL_ADD, INOTIFY_FD, &w) == 0,
+		"failed to watch INOTIFY_FD"
+	);
+
+	//watch for quit signal
+	EpollEvent quit_event = {
+		.events = EPOLLIN,
+		.data.fd = quit_signal
+	};
+	ASSERT(
+		epoll_ctl(EPOLL_FD, EPOLL_CTL_ADD, quit_signal, &quit_event) == 0,
+		"failed to watch quit_signal"
+	);
+
+
 	printf("> Scanning input devices...\n");
 	int devices_count = _scan_devices();
 	if(devices_count == 0){
 		fprintf(stderr, "ERROR: no input devices found (is it running from the input group?)");
 		return;
 	}
-	printf("Ok! (%d devices found)\n", devices_count);
+	printf("> ...Ok! (%d devices added)\n", devices_count);
 
-	printf("\nWaiting for key events...\n");
+	printf("\n> Waiting for kb/mouse input...\n");
 
 	EpollEvent events[MAX_DEVICES];
 	while(true){
@@ -288,17 +339,20 @@ void start_listening_to_keys(int quit_signal){
 
 		for(int i = 0; i < fd_count; i++){
 			auto curr_event = events[i];
-			size_t fd = curr_event.data.fd;
-			if(fd == (size_t)quit_signal) goto cleanup;
-			if(fd == (size_t)INOTIFY_FD){
+			int fd = curr_event.data.fd;
+
+			if(fd == quit_signal) goto cleanup;
+
+			if(fd == INOTIFY_FD){
 				 _handle_inotify();
-			}else{
-				//dispatch to the correct device
-				for(size_t k = 0; k < MAX_DEVICES; k++){
-					if(DEVICES[k].fd != fd) continue;
-					_handle_device(&DEVICES[k], curr_event.events);
-					break;
-				}
+				 continue;
+			}
+
+			//dispatch event to the correct device
+			for(size_t k = 0; k < MAX_DEVICES; k++){
+				if(DEVICES[k].fd != fd) continue;
+				_handle_device(&DEVICES[k], curr_event.events);
+				break;
 			}
 		}
 	}
