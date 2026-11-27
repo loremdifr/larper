@@ -16,7 +16,9 @@ typedef struct inotify_event InotifyEvent;
 static InputDevice DEVICES[MAX_DEVICES] = {};
 static int         EPOLL_FD             = -1;
 static int         INOTIFY_FD           = -1;
+static bool        RANDOMIZE_PITCH      = true;
 
+bool set_randomize_pitch(bool randomize_pitch);
 void start_listening_to_keys(int quit_signal);
 
 static bool _has_event_type(int fd, unsigned long ev_type);
@@ -30,6 +32,11 @@ static void _handle_inotify(void);
 static void _handle_device(InputDevice *device, uint32_t events);
 
 // impl
+
+bool set_randomize_pitch(bool randomize_pitch){
+	RANDOMIZE_PITCH = randomize_pitch;
+	return true;
+}
 
 static bool _has_event_type(int fd, unsigned long ev_type){
 	if(ev_type > EV_MAX) return false;
@@ -200,9 +207,9 @@ static void _handle_event(const InputEvent *input_event){
 	auto sound = KEYMAP[keycode];
 	if(sound > NO_SOUND){
  		//pitch randomization!
- 		auto pitch_variation = random_step(0.05);
- 		// printf("\n PITCH: %.3f\n", pitch_variation);
-		queue_push(sound, pitch_variation);
+ 		auto pitch = RANDOMIZE_PITCH ? random_step(0.05) : 1.0f;
+ 		// printf("\n PITCH: %.3f\n", pitch);
+		queue_push(sound, pitch);
 	}
 }
 

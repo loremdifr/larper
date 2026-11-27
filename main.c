@@ -58,6 +58,7 @@ typedef struct {
 	const char *program_name;
 	const char *command;
 	float volume;
+	bool randomize_pitch;
 	const char *target_folder;
 } Arguments;
 
@@ -76,10 +77,11 @@ static int command_keys(void);
 static int command_help(void);
 
 static Arguments ARGS = {
-	.program_name  = "larper",
-	.command       = "",
-	.volume        = 1.0,
-	.target_folder = "",
+	.program_name    = "larper",
+	.command         = "",
+	.volume          = 1.0,
+	.randomize_pitch = true,
+	.target_folder   = "",
 };
 
 static const Command COMMANDS[] = {
@@ -144,7 +146,9 @@ static void print_usage(void){
 	}
 
 	printf("the valid [options] are:\n");
+	//TODO: make this dynamic
 	printf("\t--volume <value>\tsets the volume to <value>, defaults to 1.0\n");
+	printf("\t--no-random-pitch\tdisables per-key random pitch variation\n");
 
 	printf("\n");
 }
@@ -220,6 +224,10 @@ static int command_run(void){
 
 	printf("Ok! (%zu sounds loaded)\n", SOUND_COUNT);
 
+	printf("> %s pitch randomization...", ARGS.randomize_pitch ? "Enabling" : "Disabling");
+	ASSERT(set_randomize_pitch(ARGS.randomize_pitch), "set_randomize_pitch failed");
+	printf("Ok!\n");
+
 	printf("> Setting volume to '%2.f'...", ARGS.volume);
 	ASSERT(set_volume(ARGS.volume), "set_volume failed");
 	printf("Ok!\n");
@@ -259,6 +267,12 @@ static void parse_args(int argc, char *argv[argc]){
 		|| strcmp(curr_arg, "-vol")     == 0){
 			auto next_arg = argv[++i];
 			ARGS.volume = strtof(next_arg, NULL); //convert to float
+		}
+
+		//pitch randomization
+		if(strcmp(curr_arg, "--no-random-pitch") == 0
+		|| strcmp(curr_arg, "-nopitch")          == 0){
+			ARGS.randomize_pitch = false;
 		}
 
 		//target_folder

@@ -2,10 +2,10 @@
 	[ ]	mac port..? idk
 	[ ] add tests
 	[ ]	improve importer
-	[ ]	add option to run without the pitch variation
 
 ＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿
 Archive:
+	[x]	add option to run without the pitch variation @done (26-11-27 04:33)
 	[x]	handle connecting and disconnecting input devices @done (26-11-26 00:44)
 	[x]	handle sigint properly @done (26-11-25 20:54)
 	[x]	use argv for the target folder @done (26-11-25 05:10)

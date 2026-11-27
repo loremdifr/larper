@@ -91,14 +91,14 @@ CLANG_ARM64 := clang --target=aarch64-linux-gnu
 
 package: clean
 	@mkdir -p "$(DIST_DIR)"
-	$(MAKE) package_for_arch ARCH=amd64 CC_PKG="$(CLANG_AMD64)" GOARCH_PKG=amd64
-	$(MAKE) package_for_arch ARCH=arm64 CC_PKG="$(CLANG_ARM64)" GOARCH_PKG=arm64
+	$(MAKE) package_for_arch ARCH=x86_64 CC_PKG="$(CLANG_AMD64)" GOARCH_PKG=amd64
+	$(MAKE) package_for_arch ARCH=arm64 CC_PKG="$(CLANG_ARM64)"  GOARCH_PKG=arm64
 
 package_for_arch:
 	@mkdir -p "$(PKG_BASE)$(DS)$(ARCH)"
 	$(CC_PKG) $(RELEASE_CFLAGS) $(SRC_NAME) -o "$(PKG_BASE)$(DS)$(ARCH)$(DS)larper" $(RELEASE_LD_LIBS)
 	GOOS=linux GOARCH=$(GOARCH_PKG) go build -C importer -trimpath -ldflags="$(RELEASE_GO_LDFLAGS)" -o "$(PKG_BASE)$(DS)$(ARCH)$(DS)importer" .
-	tar czf "$(DIST_DIR)$(DS)larper-$(VERSION)-linux-$(ARCH).tar.gz" -C "$(PKG_BASE)$(DS)$(ARCH)" .
+	tar czf "$(DIST_DIR)$(DS)larper_$(VERSION)_linux_$(ARCH).tar.gz" -C "$(PKG_BASE)$(DS)$(ARCH)" .
 
 # phony is so that it skips checking the commands as if they
 # were files to avoid recompilation. none of those commands are files
