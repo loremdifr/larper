@@ -150,7 +150,7 @@ static void print_usage(void){
 }
 
 static int command_version(void){
-	printf("larper v%s\n", VERSION);
+	printf("larper %s\n", VERSION);
 	return EXIT_SUCCESS;
 }
 
