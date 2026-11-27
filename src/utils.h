@@ -1,10 +1,6 @@
 #ifndef _UTILS_H
 #define _UTILS_H
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <assert.h>
-
 #define ASSERT(cond, ...)                                   \
     do {                                                    \
         if (!(cond)) {                                      \

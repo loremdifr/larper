@@ -1,9 +1,6 @@
 #ifndef _KEYCODE_MAP_H
 #define _KEYCODE_MAP_H
 
-#include <linux/input-event-codes.h>
-#include <string.h>
-
 typedef struct {
 	const char *name;
 	uint16_t    code;

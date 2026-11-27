@@ -1,6 +1,6 @@
 *.o
 *.d
 build/*
-examples/*/build/*
+packs/*
 .cache/*
 .idea/*

@@ -1,15 +1,6 @@
 #ifndef _SOUNDS_H
 #define _SOUNDS_H
 
-#include <stdatomic.h>
-#include <dirent.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-
-#define MINIAUDIO_IMPLEMENTATION
-#include "libs/miniaudio.h"
-
 constexpr size_t MAX_POLYPHONY = 64;
 constexpr size_t QUEUE_SIZE    = 256;
 constexpr size_t CHANNELS      = 2;

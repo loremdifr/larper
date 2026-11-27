@@ -2,16 +2,42 @@
 #define _GNU_SOURCE
 #endif
 
+
+#include <assert.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <linux/input-event-codes.h>
+#include <linux/input.h>
+#include <signal.h>
+#include <stdalign.h>
+#include <stdatomic.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <signal.h>
+#include <string.h>
+#include <sys/epoll.h>
+#include <sys/inotify.h>
+#include <sys/ioctl.h>
 #include <sys/signalfd.h>
 #include <unistd.h>
 
-#include "utils.h"
-#include "keycode_map.h"
-#include "sounds.h"
-#include "input_handling.h"
+//madevice more like smalldevice
+#define MA_NO_MP3
+#define MA_NO_FLAC
+#define MA_NO_ENCODING
+#define MA_NO_GENERATION
+#define MA_NO_RESOURCE_MANAGER
+#define MA_NO_NODE_GRAPH
+#define MA_NO_ENGINE
+
+#define MINIAUDIO_IMPLEMENTATION
+#include "libs/miniaudio.h"
+
+#include "src/utils.h"
+#include "src/keycode_map.h"
+#include "src/sounds.h"
+#include "src/input_handling.h"
 
 static constexpr char VERSION[] = "larper v0.1.0\n";
 

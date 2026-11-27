@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,11 +14,24 @@ import (
 
 	"github.com/SladkyCitron/resona/afmt"
 	"github.com/SladkyCitron/resona/codec"
-	"github.com/SladkyCitron/resona/codec/wav"
-	_ "github.com/SladkyCitron/resona/codec/mp3"
 	_ "github.com/SladkyCitron/resona/codec/flac"
+	_ "github.com/SladkyCitron/resona/codec/mp3"
 	_ "github.com/SladkyCitron/resona/codec/oggvorbis"
+	"github.com/SladkyCitron/resona/codec/wav"
 )
+
+type FromTo struct {
+	from float64
+	to   float64
+}
+
+type DecodedAudioFile struct {
+	audio_data    []float32
+	format        afmt.Format
+	sample_format afmt.SampleFormat
+	sample_rate   float64
+	channels      int
+}
 
 
 func find_config_file(zip_file *zip.ReadCloser) (io.ReadCloser, error) {
@@ -57,10 +71,6 @@ func parse_json(json_file io.ReadCloser) (map[string]any, error) {
 
 }
 
-type FromTo struct {
-	from float64
-	to   float64
-}
 
 func keymap_from_definitions(definitions any) (map[string]FromTo, error) {
 	defs, ok := definitions.(map[string]any)
@@ -112,13 +122,6 @@ func keymap_from_definitions(definitions any) (map[string]FromTo, error) {
 	return key_map, nil
 }
 
-type DecodedAudioFile struct {
-	audio_data    []float32
-	format        afmt.Format
-	sample_format afmt.SampleFormat
-	sample_rate   float64
-	channels      int
-}
 
 func decode_audio_file(audio_file io.ReadCloser) (*DecodedAudioFile, error){
 	result := DecodedAudioFile{}
@@ -185,12 +188,18 @@ func save_audio(
 	}
 	defer file.Close()
 
+	sample_format := afmt.SampleFormat{
+		BitDepth: 16,
+		Encoding: afmt.SampleEncodingInt,
+		Endian: binary.LittleEndian,
+	}
+
 	encoder, err := wav.NewEncoder(
 		file,
 		decoded_file.format,
-		decoded_file.sample_format,
-		//wav.FormatFloat,
+		sample_format,
 		wav.FormatInt,
+		// wav.FormatFloat,
 	)
 
 	if err != nil {
@@ -199,6 +208,7 @@ func save_audio(
 	defer encoder.Close()
 
 	_, err = encoder.WriteSamples(audio_slice)
+
 	if err != nil {
 		return err
 	}
@@ -264,21 +274,7 @@ func main(){
 		print_err(err)
 	}
 
-	// pretty_json, err := json.MarshalIndent(json_data, "", "  ")
-	// if err != nil {
-	// 	print_err(err)
-	// }
-	// fmt.Println(string(pretty_json))
-
-	//things i need to grab from the json file:
-	// json_data.audio_file
-	// json_data.author
-	// json_data.name
-	// json_data.definition_method MUST be "single" for now
-	// json_data.definitions
-	//	for definition in definitions ->
-	//  mapkey is the event
-	//  mapval contains "timing" array, from to
+	//extract stuff from json
 
 	pack_name         := json_data["name"].(string)
 	pack_author       := json_data["author"].(string)

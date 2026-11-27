@@ -1,20 +1,6 @@
 #ifndef _INPUT_HANDLING_H
 #define _INPUT_HANDLING_H
 
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <linux/input.h>
-#include <sys/ioctl.h>
-#include <sys/epoll.h>
-#include <sys/inotify.h>
-#include <assert.h>
-#include <stdalign.h>
-#include <errno.h>
-
-#include "sounds.h"
-
-
 constexpr size_t MAX_DEVICES = 64;
 
 typedef struct {

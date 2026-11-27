@@ -12,7 +12,7 @@ endif
 
 SRC_NAME  := $(addprefix $(CURDIR)/, main.c)
 BUILD_DIR := $(addprefix $(CURDIR)/, build)
-EXEC_NAME  = $(BUILD_DIR)$(DS)main$(EXT)
+EXEC_NAME  = $(BUILD_DIR)$(DS)larper$(EXT)
 INCLUDES_DIR := $(addprefix $(CURDIR)/, ../..)
 
 CFLAGS = -fdiagnostics-color=always -W -Werror -Wextra -pedantic -g -std=gnu23 -Wno-missing-field-initializers
@@ -46,8 +46,21 @@ gf2: clean
 	$(CC) $(CFLAGS) $(SRC_NAME) -o $(EXEC_NAME) $(LD_LIBS)
 	gf2 --args ./$(EXEC_NAME) $(ARGS)
 
+###### release stuff
+release: CFLAGS := -W -Werror -Wextra -pedantic -std=gnu23
+release: CFLAGS += -O3 -DNDEBUG -flto -fno-plt
+release: CFLAGS += -fstack-protector-strong
+release: CFLAGS += -D_FORTIFY_SOURCE=2
+release: CFLAGS += -I$(INCLUDES_DIR)
+release: LD_LIBS := -lm -flto
+release: GO_NAME := $(BUILD_DIR)$(DS)importer$(EXT)
+release: clean
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SRC_NAME) -o $(EXEC_NAME) $(LD_LIBS)
+	go build -C importer -trimpath -ldflags="-s -w" -o $(GO_NAME) .
+
 # phony is so that it skips checking the commands as if they
 # were files to avoid recompilation. none of those commands are files
 # and since we're using a unity build we don't really need separate translation
 # units
-.PHONY: run valgrind gf2 check clean all
+.PHONY: run valgrind gf2 check clean all release
