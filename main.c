@@ -38,6 +38,7 @@
 #include "src/keycode_map.h"
 #include "src/sounds.h"
 #include "src/input_handling.h"
+#include "src/version.h"
 
 static int QUIT_SIGNAL = -1;
 
@@ -74,7 +75,6 @@ static int command_packs(void);
 static int command_keys(void);
 static int command_help(void);
 
-static const char VERSION[] = "0.1.0";
 static Arguments ARGS = {
 	.program_name  = "larper",
 	.command       = "",

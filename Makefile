@@ -20,6 +20,21 @@ CFLAGS+= -I$(INCLUDES_DIR)
 
 LD_LIBS = -lm
 
+## generate version from git tag
+
+VERSION_H   := $(CURDIR)/src/version.h
+GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+
+$(VERSION_H): FORCE
+	@mkdir -p $(CURDIR)
+	@printf '%s\n'                                            \
+			'#ifndef _VERSION_H'                              \
+			'#define _VERSION_H'                              \
+			'static const char VERSION[] = "$(GIT_VERSION)";' \
+			'#endif //_VERSION_H' > $@
+
+###############
+
 clean:
 	-$(RM) "$(EXEC_NAME)"
 
@@ -57,6 +72,7 @@ RELEASE_LD_LIBS := -lm -flto
 RELEASE_GO_LDFLAGS := -s -w
 
 ###### release is the local arch!
+release: $(VERSION_H)
 release: CFLAGS  := $(RELEASE_CFLAGS)
 release: LD_LIBS := $(RELEASE_LD_LIBS)
 release: GO_NAME := $(BUILD_DIR)$(DS)importer$(EXT)
@@ -88,4 +104,4 @@ package_for_arch:
 # were files to avoid recompilation. none of those commands are files
 # and since we're using a unity build we don't really need separate translation
 # units
-.PHONY: run valgrind gf2 check clean all release package package_for_arch
+.PHONY: run valgrind gf2 check clean all release package package_for_arch FORCE
