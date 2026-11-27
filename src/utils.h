@@ -30,4 +30,13 @@ static float random_step(float variation){
 	return 1.0f + ranged_rand * variation;
 }
 
+static const char *strip_leading_dashes(const char *str){
+    while(true){
+    	auto next_char = *str + 1;
+    	if(next_char == '\0') return str;
+    	if(*str != '-')       return str;
+		str++;
+	}
+}
+
 #endif //_UTILS_H

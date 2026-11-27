@@ -39,8 +39,10 @@ static PlayingSound    SOUNDS_PLAYING[MAX_POLYPHONY] = {};
 static SoundEventQueue SOUND_QUEUE                   = {};
 static ma_device       AUDIO_DEVICE                  = {};
 static int16_t         KEYMAP[KEYMAP_COUNT];
+static float           VOLUME                        = 1.0f;
 
 bool pack_load(const char *folder_path);
+bool set_volume(float volume);
 bool audio_init(void);
 void audio_free(void);
 bool queue_push(uint16_t id, float step);
@@ -52,6 +54,13 @@ static void _miniaudio_callback(ma_device *device, void *out, const void *in, ma
 static void _audio_callback(int16_t *out, uint32_t frames);
 
 //impls
+
+bool set_volume(float volume){
+	VOLUME = volume;
+	if(VOLUME > 2.0) VOLUME = 2.0;
+	if(VOLUME < 0.1) VOLUME = 0.1;
+	return true;
+}
 
 bool queue_push(uint16_t id, float step){
 	auto head = atomic_load(&SOUND_QUEUE.head);
@@ -77,7 +86,7 @@ bool audio_init(void){
 	config.sampleRate         = SAMPLE_RATE;
 	config.dataCallback       = _miniaudio_callback;
 	config.performanceProfile = ma_performance_profile_low_latency;
-	config.periodSizeInFrames = 256; //TODO: is this correct..?
+	config.periodSizeInFrames = 256; //NOTE: adjust this if too delayed
 
 	auto try_init = ma_device_init(NULL, &config, &AUDIO_DEVICE);
 	if(try_init != MA_SUCCESS){
@@ -201,9 +210,9 @@ static void _audio_callback(int16_t *out, uint32_t frames){
 			_continue_playing_sound(curr_sound, &left, &right);
 		}
 
-		out[frame * CHANNELS]     = clamp16(left);
-		out[frame * CHANNELS + 1] = clamp16(right);
-	 	//NOTE: +1 for right because it's interleaved stereo audio
+		out[frame * CHANNELS]     = clamp16((int32_t)(left  * VOLUME));
+		out[frame * CHANNELS + 1] = clamp16((int32_t)(right * VOLUME));
+	 	//NOTE: +1 for right channel bc it's interleaved stereo audio
 	}
 }
 

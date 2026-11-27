@@ -39,39 +39,120 @@
 #include "src/sounds.h"
 #include "src/input_handling.h"
 
-static constexpr char VERSION[] = "larper v0.1.0\n";
+static int QUIT_SIGNAL = -1;
 
-static constexpr char ABOUT[] =
-"larper is a small program that listens to keyboard "
-"and mouse events in the background and plays sounds.\n";
+void setup_signals(){
+	sigset_t mask;
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+	sigaddset(&mask, SIGTERM);
+	sigprocmask(SIG_BLOCK, &mask, NULL);
 
-static constexpr char USAGE[] =
-"USAGE: %s <path|command>\n\n"
-"where <path> is the path to a directory containing "
-"one wav file per key.\n";
+	QUIT_SIGNAL = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+}
 
-static constexpr char COMMANDS[] =
-"the commands are:\n"
-"  version   shows the version info\n"
-"  packs     information about Sound Packs\n"
-"  keys      lists the expected filenames for the WAV files\n"
-"  help      shows this message\n"
-;
+//
 
-static constexpr char PACKS[] =
-"ABOUT SOUND PACKS:\n"
-"1. there's no concept of a `sound pack` in larper.\n"
-"2. larper simply uses the WAV files located in the path you point it to.\n"
-"3. larper needs no configuration, it uses a convention for the file names.\n"
-"   (for a list of expected filenames, use: %s keys)\n"
-"\nWHERE TO GET SOUND PACKS?\n"
-"1. larper comes with an importer utility to import Sounds Packs from MechVibes.\n"
-"2. you can download packs from MechVibes at https://mechvibes.com/sound-packs\n"
-"3. once you get the zip file from there, run it:\n"
-"   importer <zipfile>\n\n"
-;
+typedef struct {
+	const char *program_name;
+	const char *command;
+	float volume;
+	const char *target_folder;
+} Arguments;
 
-void print_expected_filenames(){
+typedef int (*FnPointer)(void);
+typedef struct {
+	const char *name;
+	const char *short_name;
+	FnPointer   action;
+	const char *description;
+} Command;
+
+static int command_run(void);
+static int command_version(void);
+static int command_packs(void);
+static int command_keys(void);
+static int command_help(void);
+
+static const char VERSION[] = "0.1.0";
+static Arguments ARGS = {
+	.program_name  = "larper",
+	.command       = "run",
+	.volume        = 1.0,
+	.target_folder = ".",
+};
+
+static const Command COMMANDS[] = {
+	{
+		.name        = "run",
+		.short_name  = "r",
+		.action      = command_run,
+		.description = "run larper with a <target> directory",
+	},
+	{
+		.name        = "version",
+		.short_name  = "v",
+		.action      = command_version,
+		.description = "shows the version info",
+	},
+	{
+		.name        = "packs",
+		.short_name  = "p",
+		.action      = command_packs,
+		.description = "information about Sound Packs",
+	},
+	{
+		.name        = "keys",
+		.short_name  = "k",
+		.action      = command_keys,
+		.description = "lists the expected filenames for the WAV files",
+	},
+	{
+		.name        = "help",
+		.short_name  = "h",
+		.action      = command_help,
+		.description = "shows this help message",
+	},
+};
+
+
+static void print_usage(void){
+	printf("USAGE: %s <command> [options] [path]\n\n", ARGS.program_name);
+	printf("where [path] is the path to a directory containing ");
+	printf("one wav file per key. \nIf not present, it will use the current directory.\n");
+
+	printf("the valid <commands> are:\n");
+	for(size_t i = 0; i < ARR_LEN(COMMANDS); i++){
+		auto command = COMMANDS[i];
+		printf("\t%s\t\t%s\n", command.name, command.description);
+	}
+
+	printf("the valid [options] are:\n");
+	printf("\t--volume <value>\tsets the volume to <value>, defaults to 1.0\n");
+
+	printf("\n");
+}
+
+static int command_version(void){
+	printf("larper v%s\n", VERSION);
+	return EXIT_SUCCESS;
+}
+
+static int command_packs(void){
+	printf("ABOUT SOUND PACKS:\n");
+	printf("1. there's no concept of a `sound pack` in larper.\n");
+	printf("2. larper simply uses the WAV files located in the path you point it to.\n");
+	printf("3. larper needs no configuration, it uses a convention for the file names.\n");
+	printf("   (for a list of expected filenames, use: %s keys)\n", ARGS.program_name);
+	printf("\nWHERE TO GET SOUND PACKS?\n");
+	printf("1. larper comes with an importer utility to import Sounds Packs from MechVibes.\n");
+	printf("2. you can download packs from MechVibes at https://mechvibes.com/sound-packs\n");
+	printf("3. once you get the zip file from there, run it:\n");
+	printf("   importer <zipfile>\n\n");
+	return EXIT_SUCCESS;
+}
+
+static int command_keys(void){
 	printf(
 		"ABOUT KEYS:\n"
 		"larper expects to be pointed towards a directory containing "
@@ -86,72 +167,47 @@ void print_expected_filenames(){
 		printf(" %s.wav\n", key_name);
 	}
 
+	return EXIT_SUCCESS;
 }
 
-static int QUIT_SIGNAL = -1;
+static int command_help(void){
 
-void setup_signals(){
-	sigset_t mask;
-	sigemptyset(&mask);
-	sigaddset(&mask, SIGINT);
-	sigaddset(&mask, SIGTERM);
-	sigprocmask(SIG_BLOCK, &mask, NULL);
+	printf("larper is a small program that listens to keyboard ");
+	printf("and mouse events in the background and plays sounds.\n\n");
 
-	QUIT_SIGNAL = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+	print_usage();
+	return EXIT_SUCCESS;
 }
 
-int main(int argc, char *argv[argc]){
+static int command_run(void){
 
-	const char *program_name = (argc > 0 && argv[0])
-		? argv[0]
-		: "larper";
-
-	if(argc < 2){
-		fprintf(stderr, "ERROR: missing required argument!\n");
-		fprintf(stderr, USAGE, program_name);
-		fprintf(stderr, COMMANDS);
+	if(strlen(ARGS.target_folder) == 0){
+		fprintf(stderr, "\nERROR: missing [path] argument for command 'run'!\n\n");
+		print_usage();
 		return EXIT_FAILURE;
-	}
-
-	const char *first_arg = argv[1];
-
-	if(strcmp(first_arg, "version") == 0
-	|| strcmp(first_arg, "--version") == 0
-	|| strcmp(first_arg, "-v") == 0){
-		printf(VERSION);
-		return EXIT_SUCCESS;
-	}
-
-	if(strcmp(first_arg, "help") == 0
-	|| strcmp(first_arg, "--help") == 0
-	|| strcmp(first_arg, "-h") == 0){
-		printf(ABOUT);
-		printf("\n");
-		printf(USAGE, program_name);
-		printf(COMMANDS);
-		return EXIT_SUCCESS;
-	}
-
-	if(strcmp(first_arg, "packs") == 0
-	|| strcmp(first_arg, "--packs") == 0
-	|| strcmp(first_arg, "sounds") == 0
-	|| strcmp(first_arg, "soundpacks") == 0){
-		printf(PACKS, program_name);
-		return EXIT_SUCCESS;
-	}
-
-	if(strcmp(first_arg, "keys") == 0
-	|| strcmp(first_arg, "--keys") == 0
-	|| strcmp(first_arg, "-k") == 0){
-		print_expected_filenames();
-		return EXIT_SUCCESS;
 	}
 
 	setup_signals();
 
-	printf("\n> Loading pack: '%s'...", first_arg);
-	pack_load(first_arg);
+	printf("\n> Loading pack: '%s'...", ARGS.target_folder);
+	pack_load(ARGS.target_folder);
+
+	if(SOUND_COUNT <= 0){
+		printf("Failed!\n");
+		fprintf(
+			stderr,
+			"\nERROR: No valid wav files found in directory '%s'\n\n",
+			ARGS.target_folder
+		);
+		print_usage();
+		return EXIT_FAILURE;
+	}
+
 	printf("Ok! (%zu sounds loaded)\n", SOUND_COUNT);
+
+	printf("> Setting volume to '%2.f'...", ARGS.volume);
+	ASSERT(set_volume(ARGS.volume), "set_volume failed");
+	printf("Ok!\n");
 
 	printf("> Initializing audio...");
 	ASSERT(audio_init(), "audio_init failed");
@@ -161,5 +217,55 @@ int main(int argc, char *argv[argc]){
 
 	audio_free();
 	close(QUIT_SIGNAL);
+
 	return EXIT_SUCCESS;
+}
+
+static void parse_args(int argc, char *argv[argc]){
+	//args in the middle are options
+	for(int i = 0; i < argc; i++){
+		const char *curr_arg = argv[i];
+
+		//program name
+		if(i == 0){
+			ARGS.program_name = curr_arg;
+			continue;
+		}
+
+		//command
+		if(i == 1){
+			ARGS.command = strip_leading_dashes(curr_arg);
+			continue;
+		}
+
+		//volume
+		if(strcmp(curr_arg, "--volume") == 0
+		|| strcmp(curr_arg, "-vol")     == 0){
+			auto next_arg = argv[++i];
+			ARGS.volume = strtof(next_arg, NULL); //convert to float
+		}
+
+		//target_folder
+		if(i == argc - 1){
+			ARGS.target_folder = curr_arg;
+			continue;
+		}
+	}
+}
+
+int main(int argc, char *argv[argc]){
+
+	parse_args(argc, argv);
+
+	//see if we can find the command
+	for(size_t i = 0; i < ARR_LEN(COMMANDS); i++){
+		auto command = COMMANDS[i];
+		if(strcmp(command.name, ARGS.command) == 0){
+			return command.action();
+		}
+	}
+
+	fprintf(stderr, "\nERROR: unrecognized command '%s'.\n\n", ARGS.command);
+	print_usage();
+	return EXIT_FAILURE;
 }
