@@ -1,6 +1,14 @@
-	[x]	refactor into separate files @done (26-11-25 03:48)
+	[ ]	windows port
+	[ ]	mac port..? idk
+	[ ] add tests
+	[ ]	improve importer
+	[ ]	add option to run without the pitch variation
+
+＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿
+Archive:
+	[x]	handle connecting and disconnecting input devices @done (26-11-26 00:44)
+	[x]	handle sigint properly @done (26-11-25 20:54)
 	[x]	use argv for the target folder @done (26-11-25 05:10)
 	[x]	instructions when called wrong @done (26-11-25 05:10)
 	[x]	be able to list all the expected sound files and usage @done (26-11-25 05:10)
-	[x]	handle sigint properly @done (26-11-25 20:54)
-	[x]	handle connecting and disconnecting input devices @done (26-11-26 00:44)
+	[x]	refactor into separate files @done (26-11-25 03:48)
