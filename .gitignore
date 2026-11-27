@@ -1,6 +1,8 @@
 *.o
 *.d
 build/*
+dist/*
 packs/*
 .cache/*
 .idea/*
+src/version.h
