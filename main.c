@@ -77,9 +77,9 @@ static int command_help(void);
 static const char VERSION[] = "0.1.0";
 static Arguments ARGS = {
 	.program_name  = "larper",
-	.command       = "run",
+	.command       = "",
 	.volume        = 1.0,
-	.target_folder = ".",
+	.target_folder = "",
 };
 
 static const Command COMMANDS[] = {
@@ -115,6 +115,22 @@ static const Command COMMANDS[] = {
 	},
 };
 
+
+static void print_error(const char *format, ...){
+	const char *RED_COLOR_START = "\033[31m";
+	const char *RED_COLOR_END   = "\033[0m";
+
+	fputs("\nERROR: ", stderr);
+    fputs(RED_COLOR_START, stderr);
+
+    va_list args;
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+
+    fputs(RED_COLOR_END, stderr);
+    fputs("\n\n", stderr);
+}
 
 static void print_usage(void){
 	printf("USAGE: %s <command> [options] [path]\n\n", ARGS.program_name);
@@ -182,7 +198,7 @@ static int command_help(void){
 static int command_run(void){
 
 	if(strlen(ARGS.target_folder) == 0){
-		fprintf(stderr, "\nERROR: missing [path] argument for command 'run'!\n\n");
+		print_error("missing [path] argument for command 'run'!");
 		print_usage();
 		return EXIT_FAILURE;
 	}
@@ -194,9 +210,8 @@ static int command_run(void){
 
 	if(SOUND_COUNT <= 0){
 		printf("Failed!\n");
-		fprintf(
-			stderr,
-			"\nERROR: No valid wav files found in directory '%s'\n\n",
+		print_error(
+			"No valid wav files found in directory '%s'",
 			ARGS.target_folder
 		);
 		print_usage();
@@ -222,6 +237,7 @@ static int command_run(void){
 }
 
 static void parse_args(int argc, char *argv[argc]){
+
 	//args in the middle are options
 	for(int i = 0; i < argc; i++){
 		const char *curr_arg = argv[i];
@@ -255,6 +271,12 @@ static void parse_args(int argc, char *argv[argc]){
 
 int main(int argc, char *argv[argc]){
 
+	if(argc <= 1){
+		print_error("missing required <command> argument.");
+		print_usage();
+		return EXIT_FAILURE;
+	}
+
 	parse_args(argc, argv);
 
 	//see if we can find the command
@@ -265,7 +287,7 @@ int main(int argc, char *argv[argc]){
 		}
 	}
 
-	fprintf(stderr, "\nERROR: unrecognized command '%s'.\n\n", ARGS.command);
+	print_error("unrecognized command '%s'.", ARGS.command);
 	print_usage();
 	return EXIT_FAILURE;
 }

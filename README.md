@@ -10,9 +10,9 @@ This doesn't even have any crazy optimizations or anything, it just listens to k
 
 ## Installation
 
-Download the latest release or compile from source.
+Download the [latest release](https://github.com/loremdifr/larper/releases) or compile from source with `make release`.
 
-larper is a single executable, and it comes with a helper importer. See below for more info on the importer.
+`larper` is a single executable, and it comes with a helper `importer` (also an executable). [See below](#importing-sound-packs-from-mechvibes) for more info on the importer.
 
 **IMPORTANT:** This program is linux only and requires the `input` usergroup to be run properly as it directly listens to `/dev/input`, so ensure your user has access to it:
 
